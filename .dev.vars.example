@@ -1,0 +1,5 @@
+ADMIN_PASSWORD=change-this-local-password
+SESSION_SECRET=replace-with-a-long-random-value
+MAGIC_LINK_SECRET=replace-with-a-different-long-random-value
+DEV_SHOW_MAGIC_LINKS=1
+# RESEND_API_KEY=re_example

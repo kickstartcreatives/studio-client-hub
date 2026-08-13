@@ -1,0 +1,17 @@
+{
+  "name": "studio-client-hub",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "db:migrate:local": "wrangler d1 migrations apply studio-client-hub --local",
+    "db:seed:local": "wrangler d1 execute studio-client-hub --local --file=./seed.sql",
+    "test": "wrangler deploy --dry-run --outdir=.test-build && node --test",
+    "check": "npm test && wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "miniflare": "5.20260811.1-alpha",
+    "wrangler": "4.123.0"
+  }
+}
