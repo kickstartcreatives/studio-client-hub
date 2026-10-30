@@ -3,18 +3,17 @@
 [![CI](https://github.com/kickstartcreatives/studio-client-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/kickstartcreatives/studio-client-hub/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3f6b5b.svg)](LICENSE)
 
-A calm, self-hosted client CRM and portal for independent web designers. It gives the
-studio an admin dashboard and Client 360, while each client gets a private project page
-for progress, updates, agreements, and requests.
+A self-hosted CRM and client portal for independent web designers. Keep track of client
+work in the admin dashboard, and give each client a place to check progress or send a
+request.
 
-The starter is intentionally standalone: one Cloudflare Worker and one D1 database. It
-does not depend on a separate proposal app, website monitor, project tracker, or private
-font license.
+It runs on one Cloudflare Worker and one D1 database. You can use it on its own, without
+connecting a proposal app, website monitor or project tracker.
 
-Use **[this template](https://github.com/new?template_name=studio-client-hub&template_owner=kickstartcreatives)**
-to make your own copy, or clone the repository to try it locally. Local evaluation needs
-no Cloudflare account or email service. Hosting it for clients requires your own Cloudflare
-and Resend setup.
+[Use this template](https://github.com/new?template_name=studio-client-hub&template_owner=kickstartcreatives)
+to make your own copy, or clone it to try locally. You don't need a Cloudflare account or
+email service for the local demo. To put it online for clients, you'll need your own
+Cloudflare and Resend accounts.
 
 ![Studio dashboard with fictional demo data](docs/images/admin-dashboard.png)
 
@@ -25,24 +24,25 @@ and Resend setup.
 
 </details>
 
-## What is included
+## What you can do
 
-- Studio overview with active clients, projects, requests, and next actions
-- Client 360 with relationship, engagement, rate, project, updates, and agreements
-- Editable project stage, progress, target date, and current focus
-- Private client portal with single-use email sign-in links
-- Client request form and admin request status workflow
-- “Open as client” preview from the admin
-- Fictional demo client for local evaluation
-- Responsive layouts for desktop, tablet, and mobile
-- Generic Inter/system typography and a muted evergreen accent
-- Tenant-scoped client queries, CSRF checks, secure cookies, login throttling, and escaped output
+- See active clients and projects, open requests, and what needs attention next.
+- Open a client's record (Client 360) to see their engagement, agreed rate and project history.
+- Update project stages, progress, target dates and the current focus.
+- Post client updates and record agreements.
+- Let clients sign in with a single-use email link and submit requests.
+- Change a request's status as you work through it.
+- Use "Open as client" from the admin to check their portal.
+
+A fictional client is included so you can try it before adding your own records. Both
+sides work on desktop and mobile. Client queries are scoped to the signed-in client;
+the app also includes CSRF checks, secure cookies, login limits and escaped output.
 
 ## Stack
 
 - Cloudflare Workers
 - Cloudflare D1 (SQLite)
-- Optional Resend email delivery
+- Resend for email delivery (not needed for the local demo)
 - Plain JavaScript and server-rendered HTML
 
 There is no framework, build-time CSS system, or client-side JavaScript dependency.
@@ -64,31 +64,31 @@ npm run dev
 ```
 
 Open `http://localhost:8787/admin/login` and use the generated `ADMIN_PASSWORD` from
-`.dev.vars`. The setup command creates unique local credentials and preserves any existing
-file. Do not copy `.dev.vars.example` unchanged; its placeholders intentionally fail the
-configuration check. Your local database and credentials are ignored by Git.
+`.dev.vars`. The setup command generates unique credentials and leaves an existing file
+alone. The values in `.dev.vars.example` are placeholders, so copying that file without
+replacing them won't work. Git ignores your local database and credentials.
 
-To preview the client experience, open `http://localhost:8787/portal`, enter
+To try the client side, open `http://localhost:8787/portal`, enter
 `maya@example.com`, and use the local preview link shown on the page. Preview links are
 shown only on localhost when `DEV_SHOW_MAGIC_LINKS=1`; that setting should never be
 configured as a deployed Worker variable.
 
-## Customize the design
+## Make it yours
 
-Edit the non-secret values in `wrangler.jsonc`:
+Set your studio name and email addresses in `wrangler.jsonc`:
 
 - `STUDIO_NAME`
 - `SUPPORT_EMAIL`
 - `EMAIL_FROM`
 
-The complete visual system lives near the top of `src/ui.js`. The main tokens are:
+Colors, fonts and layout rules are in `src/ui.js`. Start with these CSS variables:
 
 - `--accent: #3f6b5b` (muted evergreen)
 - `--sidebar: #202a35` (dark slate)
 - `--canvas: #f5f7f6` (soft neutral)
-- `--font: Inter, ui-sans-serif, ...` (generic, redistributable font stack)
+- `--font: Inter, ui-sans-serif, ...` (system font fallbacks)
 
-No private font files or source-studio brand assets are included.
+The template uses a generic font stack and includes no private font files or studio brand assets.
 
 ## Deploy to Cloudflare
 
@@ -117,8 +117,8 @@ No private font files or source-studio brand assets are included.
    npx wrangler secret put RESEND_API_KEY
    ```
 
-5. Configure a verified Resend sender in `EMAIL_FROM`. Without a valid Resend key and
-   verified sender, deployed client magic links cannot be delivered.
+5. Set `EMAIL_FROM` to a verified Resend sender. Client sign-in emails need both a valid
+   Resend key and a verified sender to work online.
 
 6. Apply the schema and deploy:
 
@@ -127,30 +127,33 @@ No private font files or source-studio brand assets are included.
    npx wrangler deploy
    ```
 
-Do not run `seed.sql` against production unless you intentionally want the fictional
-Sunrise Wellness demo record.
+The seed adds the fictional Sunrise Wellness client. Leave it out of production unless
+you want that demo record there too.
 
-## Quality checks
+## Run the checks
 
 ```bash
 npm run check
 ```
 
-The integration suite boots the actual Worker runtime and D1, then tests admin auth,
-single-use magic links, tenant isolation, CSRF protection, output escaping, CRUD flows,
-request submission, and the design token. GitHub Actions runs the same checks on every
-push and pull request, plus a weekly check. CI covers Node.js 22 and 24 and never deploys.
+This builds the Worker, runs the tests and checks dependencies for known vulnerabilities.
+The tests use the Worker runtime and D1 to check sign-in, client isolation and form
+submissions, including attempts that should be rejected. They also cover record edits,
+output escaping and the accent color.
+
+GitHub Actions runs the checks on Node.js 22 and 24 for every push and pull request, and
+once a week. It doesn't deploy the app.
 
 ## Contributing and maintenance
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the code map and contribution workflow.
-[Report a bug](https://github.com/kickstartcreatives/studio-client-hub/issues/new?template=bug_report.yml)
-with reproduction steps and fictional data. Security problems go through the
-[private reporting process](SECURITY.md#reporting-a-vulnerability).
+[CONTRIBUTING.md](CONTRIBUTING.md) explains where the code lives and how to submit a
+change. [Report a bug](https://github.com/kickstartcreatives/studio-client-hub/issues/new?template=bug_report.yml)
+with steps to reproduce it, using fictional data. Report security problems
+[privately](SECURITY.md#reporting-a-vulnerability).
 
-Dependabot proposes weekly dependency and GitHub Actions updates. Review and test changes
-before updating a deployed fork. This is a self-hosted starter, with no hosted service or
-promised support response time.
+Dependabot opens pull requests for dependency and GitHub Actions updates each week.
+Review and test them before updating a deployed copy. You'll host and maintain your own
+installation; there's no hosted service or guaranteed support response time.
 
 ## Troubleshooting
 
@@ -160,17 +163,16 @@ promised support response time.
 | `no such table` | Run `npm run db:migrate:local`. Remote deployments need the separate `--remote` migration step. |
 | No demo client | Run `npm run db:seed:local`; the seed can be run again without duplicating its records. |
 | No local sign-in link | Use `localhost` or `127.0.0.1`, check `DEV_SHOW_MAGIC_LINKS=1`, and use `maya@example.com`. Repeated attempts pause links for 15 minutes. |
-| No deployed email | Check the Resend key, verified `EMAIL_FROM` domain and provider delivery logs. The sign-in response intentionally does not reveal whether an address is registered. |
+| No deployed email | Check the Resend key, verified `EMAIL_FROM` domain and provider delivery logs. The sign-in page does not reveal whether an address is registered. |
 
-## Intentional scope
+## What's not included
 
-This first public version does not include file uploads, invoicing, automatic site-health
-monitoring, multi-studio accounts, or imports from another CRM. Those features require
-additional services and setup, so they are better added as optional modules than hidden
-dependencies in the starter.
+There are no file uploads, invoices, automatic website-health checks, multi-studio accounts
+or CRM imports. Adding those would mean more services to configure and maintain. If you
+need them, they can be built as optional additions.
 
-See [docs/AUDIT.md](docs/AUDIT.md) for the publication audit and [SECURITY.md](SECURITY.md)
-for security guidance.
+[The review notes](docs/AUDIT.md) cover what was tested and what wasn't.
+[SECURITY.md](SECURITY.md) explains deployment precautions and session handling.
 
 ## License
 
