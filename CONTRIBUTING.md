@@ -31,6 +31,12 @@ and run the Worker integration tests. The current Wrangler release uses Miniflar
 | `src/ui.js` | Server-rendered HTML and shared CSS |
 | `migrations/` | Ordered D1 schema migrations |
 | `test/` | Node tests and real Worker/D1 integration tests |
+| `demo/` | Fictional fixtures and the build-only demo renderer |
+| `scripts/build-demo.mjs` | Static demo generation using a temporary local database |
+
+`npm run dev:demo` previews the read-only demo. See [docs/DEMO.md](docs/DEMO.md) for how
+it stays separate from the full app. `npm run check` also tests the generated demo's
+links, client views, response headers and rejection of write requests.
 
 The admin belongs to one studio. Client portal sessions scope access to one client. A
 portal form field or URL parameter must never decide which client owns a query or write.

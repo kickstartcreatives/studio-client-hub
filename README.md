@@ -10,6 +10,10 @@ request.
 It runs on one Cloudflare Worker and one D1 database. You can use it on its own, without
 connecting a proposal app, website monitor or project tracker.
 
+**[Try the hosted demo](https://studio-client-hub-demo.proud-band-d824.workers.dev/)**
+to browse the studio dashboard and three fictional clients. Switch to the client view
+to see what they see. No sign-in needed; saving and sending are turned off.
+
 [Use this template](https://github.com/new?template_name=studio-client-hub&template_owner=kickstartcreatives)
 to make your own copy, or clone it to try locally. You don't need a Cloudflare account or
 email service for the local demo. To put it online for clients, you'll need your own
@@ -141,6 +145,10 @@ The tests use the Worker runtime and D1 to check sign-in, client isolation and f
 submissions, including attempts that should be rejected. They also cover record edits,
 output escaping and the accent color.
 
+The checks also build the static demo and test its links, client views, security headers,
+and rejection of write requests. Use `npm run dev:demo` to preview it locally.
+[Demo setup and publishing](docs/DEMO.md) explains how to host your own copy.
+
 GitHub Actions runs the checks on Node.js 22 and 24 for every push and pull request, and
 once a week. It doesn't deploy the app.
 
@@ -153,7 +161,8 @@ with steps to reproduce it, using fictional data. Report security problems
 
 Dependabot opens pull requests for dependency and GitHub Actions updates each week.
 Review and test them before updating a deployed copy. You'll host and maintain your own
-installation; there's no hosted service or guaranteed support response time.
+installation; the public demo cannot host real client work. There is no guaranteed
+support response time.
 
 ## Troubleshooting
 
