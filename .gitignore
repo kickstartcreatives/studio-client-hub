@@ -6,6 +6,7 @@ node_modules/
 coverage/
 test-results/
 .test-build/
+.demo-dist/
 
 # Local credentials, exports, and editor/agent state
 .dev.vars.*

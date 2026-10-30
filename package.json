@@ -7,9 +7,12 @@
     "dev": "wrangler dev --local",
     "db:migrate:local": "wrangler d1 migrations apply studio-client-hub --local",
     "db:seed:local": "wrangler d1 execute studio-client-hub --local --file=./seed.sql",
-    "test": "wrangler deploy --dry-run --outdir=.test-build && node --test",
+    "test": "wrangler deploy --dry-run --outdir=.test-build && npm run build:demo && node --test",
     "check": "npm test && npm audit --audit-level=high",
-    "setup": "node scripts/setup.mjs"
+    "setup": "node scripts/setup.mjs",
+    "build:demo": "node scripts/build-demo.mjs",
+    "dev:demo": "npm run build:demo && wrangler dev --config wrangler.demo.jsonc --local",
+    "deploy:demo": "npm run build:demo && wrangler deploy --config wrangler.demo.jsonc"
   },
   "devDependencies": {
     "miniflare": "5.20261023.3-beta",
