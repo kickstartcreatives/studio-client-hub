@@ -19,21 +19,31 @@ const CLIENT_SESSION_DAYS = 30;
 export function missingConfiguration(env) {
   const minimums = { ADMIN_PASSWORD: 12, SESSION_SECRET: 32, MAGIC_LINK_SECRET: 32 };
   const missing = Object.entries(minimums)
-    .filter(([key, minimum]) => typeof env[key] !== "string" || env[key].length < minimum)
+    .filter(([key, minimum]) => typeof env[key] !== "string" || env[key].length < minimum || /^(replace-with|change-this)/i.test(env[key]))
     .map(([key]) => key);
+  if (env.SESSION_SECRET && env.SESSION_SECRET === env.MAGIC_LINK_SECRET) missing.push("distinct signing secrets");
   return missing;
+}
+
+async function reserveAttempts(env, entries) {
+  const statements = await Promise.all(entries.map(async ([scope, value, limit]) => {
+    const key = await sha256Hex(`${scope}:${value}`);
+    return { key, limit, statement: env.DB.prepare(
+      `INSERT INTO login_attempts (key, failures, updated_at)
+       VALUES (?, 1, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET
+         failures = CASE WHEN updated_at <= datetime('now', '-15 minutes') THEN 1 ELSE failures + 1 END,
+         updated_at = CASE WHEN updated_at <= datetime('now', '-15 minutes') THEN datetime('now') ELSE updated_at END
+       RETURNING failures`
+    ).bind(key) };
+  }));
+  const results = await env.DB.batch(statements.map((item) => item.statement));
+  return { allowed: results.every((result, index) => result.results[0].failures <= statements[index].limit), key: statements[0].key };
 }
 
 export async function portalLoginAllowed(env, request, email) {
   const ip = request.headers.get("CF-Connecting-IP") || "local";
-  const key = await sha256Hex(`portal:${ip}:${email || "blank"}`);
-  const attempt = await env.DB.prepare(`SELECT blocked_until FROM login_attempts WHERE key = ?`).bind(key).first();
-  if (!attempt?.blocked_until) return { allowed: true, key };
-  return { allowed: new Date(`${attempt.blocked_until}Z`).getTime() <= Date.now(), key };
-}
-
-export async function recordPortalLoginAttempt(env, key) {
-  return recordAdminLoginFailure(env, key);
+  return reserveAttempts(env, [["portal-ip", ip, 20], ["portal-email", email || "blank", 5]]);
 }
 
 export async function makeAdminSession(request, env) {
@@ -57,25 +67,7 @@ export async function getAdminSession(request, env) {
 
 export async function adminLoginAllowed(env, request) {
   const ip = request.headers.get("CF-Connecting-IP") || "local";
-  const key = await sha256Hex(`admin:${ip}`);
-  const attempt = await env.DB.prepare(
-    `SELECT failures, blocked_until FROM login_attempts WHERE key = ?`
-  ).bind(key).first();
-  if (!attempt?.blocked_until) return { allowed: true, key };
-  return { allowed: new Date(`${attempt.blocked_until}Z`).getTime() <= Date.now(), key };
-}
-
-export async function recordAdminLoginFailure(env, key) {
-  await env.DB.prepare(
-    `INSERT INTO login_attempts (key, failures, blocked_until, updated_at)
-     VALUES (?, 1, NULL, datetime('now'))
-     ON CONFLICT(key) DO UPDATE SET
-       failures = CASE WHEN blocked_until IS NOT NULL AND blocked_until <= datetime('now') THEN 1 ELSE failures + 1 END,
-       blocked_until = CASE
-         WHEN (CASE WHEN blocked_until IS NOT NULL AND blocked_until <= datetime('now') THEN 1 ELSE failures + 1 END) >= 5
-         THEN datetime('now', '+15 minutes') ELSE blocked_until END,
-       updated_at = datetime('now')`
-  ).bind(key).run();
+  return reserveAttempts(env, [["admin", ip, 5]]);
 }
 
 export async function clearAdminLoginFailures(env, key) {

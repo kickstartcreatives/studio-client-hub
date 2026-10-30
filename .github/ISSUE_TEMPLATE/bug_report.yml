@@ -1,0 +1,20 @@
+name: Bug report
+description: Report a reproducible problem using fictional data.
+body:
+  - type: markdown
+    attributes:
+      value: 'For security vulnerabilities, use the private reporting link in SECURITY.md. Do not include credentials or real client data.'
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit or version, Node.js version, OS, browser, and whether this is local or deployed.
+    validations:
+      required: true

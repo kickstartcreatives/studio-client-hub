@@ -6,3 +6,17 @@ node_modules/
 coverage/
 test-results/
 .test-build/
+
+# Local credentials, exports, and editor/agent state
+.dev.vars.*
+!.dev.vars.example
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db
+*.log
+.claude/
+.codex/
+.vexp/
+AGENTS.md

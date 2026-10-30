@@ -1,5 +1,7 @@
-ADMIN_PASSWORD=change-this-local-password
-SESSION_SECRET=replace-with-a-long-random-value
-MAGIC_LINK_SECRET=replace-with-a-different-long-random-value
+# Run npm run setup to generate .dev.vars with unique local credentials.
+# These placeholders are intentionally rejected by the application.
+ADMIN_PASSWORD=replace-with-a-unique-admin-password
+SESSION_SECRET=replace-with-a-unique-random-session-secret
+MAGIC_LINK_SECRET=replace-with-a-unique-random-magic-link-secret
 DEV_SHOW_MAGIC_LINKS=1
-# RESEND_API_KEY=re_example
+# RESEND_API_KEY=your-resend-api-key
