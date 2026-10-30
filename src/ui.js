@@ -25,6 +25,8 @@ export function formatDate(value, fallback = "Not set") {
 }
 
 const BASE_CSS = `
+  .sign-out { color: inherit; font: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  .sign-out:hover { text-decoration: underline; }
   :root {
     --ink: #1f2937;
     --ink-soft: #465364;
@@ -55,7 +57,7 @@ const BASE_CSS = `
   a { color: var(--accent-dark); text-decoration-thickness: 1px; text-underline-offset: 3px; }
   button, input, select, textarea { font: inherit; }
   button, .button { cursor: pointer; }
-  :focus-visible { outline: 3px solid rgba(63,107,91,.28); outline-offset: 2px; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .skip-link { position: absolute; left: -9999px; top: 8px; z-index: 100; background: white; padding: 8px 12px; }
   .skip-link:focus { left: 8px; }
   .app { min-height: 100vh; }
@@ -74,7 +76,7 @@ const BASE_CSS = `
   .nav-icon { width: 18px; text-align: center; color: #9eaaa4; }
   .nav a.active .nav-icon { color: white; }
   .sidebar-foot { position: absolute; left: 16px; right: 16px; bottom: 18px; border-top: 1px solid rgba(255,255,255,.09); padding-top: 12px; }
-  .sidebar-foot a { color: #aeb9b4; font-size: 12px; text-decoration: none; }
+  .sidebar-foot a, .sidebar-foot .sign-out { color: #aeb9b4; font-size: 12px; text-decoration: none; }
   .main { min-width: 0; }
   .topbar { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.88); backdrop-filter: blur(10px); padding: 0 clamp(22px,4vw,52px); }
   .topbar-title { font-size: 13px; color: var(--muted); }
@@ -201,7 +203,7 @@ const BASE_CSS = `
     .admin-app { grid-template-columns: 74px minmax(0,1fr); }
     .sidebar { padding-left: 10px; padding-right: 10px; }
     .brand { justify-content: center; padding-left: 0; padding-right: 0; }
-    .brand-text, .nav-label, .nav a span:not(.nav-icon), .sidebar-foot { display: none; }
+    .brand-text, .nav-label, .nav a span:not(.nav-icon) { display: none; }
     .nav a { justify-content: center; padding: 9px; }
     .stats, .snapshot { grid-template-columns: repeat(2,1fr); }
     .split, .portal-grid { grid-template-columns: 1fr; }
@@ -212,6 +214,7 @@ const BASE_CSS = `
     .sidebar .brand { display: flex; justify-content: flex-start; padding: 0; margin-right: auto; }
     .sidebar .brand-mark { width: 30px; height: 30px; }
     .sidebar .nav-label { display: none; }
+    .sidebar .sidebar-foot { position: static; border: 0; padding: 0; flex-shrink: 0; }
     .sidebar .nav { display: flex; }
     .sidebar .nav a { min-height: 36px; width: 38px; }
     .topbar { min-height: 52px; padding: 0 18px; }
@@ -246,29 +249,29 @@ export function document({ title, body, env, description = "A calm client hub fo
 <body><a class="skip-link" href="#main">Skip to content</a>${body}</body></html>`;
 }
 
-export function adminShell(env, { title, active = "clients", body }) {
+export function adminShell(env, { title, active = "clients", body, session }) {
   return document({ title: `${title} · ${env.STUDIO_NAME || "Studio Client Hub"}`, env, body: `<div class="app admin-app">
-  <aside class="sidebar"><a class="brand" href="/admin">${brand(env)}</a>
+  <aside class="sidebar"><a class="brand" aria-label="${esc(env.STUDIO_NAME || "Your Studio")} home" href="/admin">${brand(env)}</a>
     <p class="nav-label">Workspace</p><nav class="nav" aria-label="Admin">
-      <a class="${active === "dashboard" ? "active" : ""}" href="/admin"><span class="nav-icon">⌂</span><span>Overview</span></a>
-      <a class="${active === "clients" ? "active" : ""}" href="/admin/clients"><span class="nav-icon">◎</span><span>Clients</span></a>
-      <a href="/portal" target="_blank"><span class="nav-icon">↗</span><span>Client portal</span></a>
-    </nav><div class="sidebar-foot"><a href="/admin/logout">Sign out</a></div>
+      <a class="${active === "dashboard" ? "active" : ""}" href="/admin" aria-label="Overview"><span class="nav-icon">⌂</span><span>Overview</span></a>
+      <a class="${active === "clients" ? "active" : ""}" href="/admin/clients" aria-label="Clients"><span class="nav-icon">◎</span><span>Clients</span></a>
+      <a href="/portal" target="_blank" aria-label="Client portal"><span class="nav-icon">↗</span><span>Client portal</span></a>
+    </nav><div class="sidebar-foot"><form method="post" action="/admin/logout"><input type="hidden" name="csrf" value="${esc(session?.csrf)}"><button class="sign-out" type="submit">Sign out</button></form></div>
   </aside><div class="main"><header class="topbar"><div class="topbar-title"><b>${esc(env.STUDIO_NAME || "Your Studio")}</b> / Admin</div></header>
   <main class="content" id="main">${body}</main></div></div>` });
 }
 
 export function portalShell(env, { title, body, session = null }) {
   return document({ title: `${title} · ${env.STUDIO_NAME || "Client portal"}`, env, body: `<div class="portal-app">
-  <header class="portal-topbar"><a class="brand" href="/portal">${brand(env, "Client portal")}</a>
-    <nav aria-label="Portal">${session ? `<span>${esc(session.user_name)}</span><a href="/portal/logout">Sign out</a>` : ""}</nav></header>
+  <header class="portal-topbar"><a class="brand" aria-label="${esc(env.STUDIO_NAME || "Your Studio")} home" href="/portal">${brand(env, "Client portal")}</a>
+    <nav aria-label="Portal">${session ? `<span>${esc(session.user_name)}</span><form method="post" action="/portal/logout"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><button class="sign-out" type="submit">Sign out</button></form>` : ""}</nav></header>
   <main class="portal-main" id="main">${body}</main></div>` });
 }
 
 export function loginShell(env, { title, subtitle, action, field, button, notice = "", kind = "client" }) {
   const label = kind === "admin" ? "Studio admin" : "Client portal";
   return document({ title, env, body: `<main class="login-page" id="main"><section class="card login-card">
-    <a class="brand" href="/">${brand(env, label)}</a><p class="eyebrow">${esc(label)}</p><h1>${esc(title)}</h1><p class="sub">${esc(subtitle)}</p>
+    <a class="brand" aria-label="${esc(env.STUDIO_NAME || "Your Studio")} home" href="/">${brand(env, label)}</a><p class="eyebrow">${esc(label)}</p><h1>${esc(title)}</h1><p class="sub">${esc(subtitle)}</p>
     ${notice}<form method="post" action="${esc(action)}">${field}<button class="button" type="submit">${esc(button)} <span aria-hidden="true">→</span></button></form>
     <p class="login-foot">Secure access · ${esc(env.STUDIO_NAME || "Your Studio")}</p></section></main>` });
 }

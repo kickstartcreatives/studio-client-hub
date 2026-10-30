@@ -1,10 +1,10 @@
+import { readForm } from "./http.js";
 import {
   clearClientCookie,
   consumeMagicToken,
   createMagicToken,
   destroyClientSession,
   portalLoginAllowed,
-  recordPortalLoginAttempt,
   validateCsrf
 } from "./auth.js";
 import { sendEmail, magicLinkEmail } from "./email.js";
@@ -29,11 +29,10 @@ export function portalLoginPage(env, { sent = false, badLink = false, devLink = 
 
 export async function handlePortalLogin(request, env) {
   if (!assertSameOrigin(request)) return new Response("Invalid origin", { status: 403 });
-  const form = await request.formData();
+  const form = await readForm(request);
   const email = String(form.get("email") || "").trim().toLowerCase().slice(0, 254);
   const rate = await portalLoginAllowed(env, request, email);
   if (!rate.allowed) return portalLoginPage(env, { sent: true });
-  await recordPortalLoginAttempt(env, rate.key);
   const localPreview = env.DEV_SHOW_MAGIC_LINKS === "1" && ["localhost", "127.0.0.1"].includes(new URL(request.url).hostname);
   if (!env.RESEND_API_KEY && !localPreview) {
     return portalLoginPage(env, { setupError: "Email delivery is not configured yet. The studio owner needs to add a Resend API key." });
@@ -48,7 +47,7 @@ export async function handlePortalLogin(request, env) {
         devLink = url;
       } else {
         const result = await sendEmail(env, { to: user.email, ...magicLinkEmail(env, user, url) });
-        if (!result.ok) console.error("Magic-link email failed:", result.error);
+        if (!result.ok) console.error("Magic-link email delivery failed");
       }
     }
   }
@@ -61,14 +60,15 @@ export async function handlePortalToken(request, env, raw) {
   return redirect("/portal", { "set-cookie": result.cookie });
 }
 
-export async function handlePortalLogout(request, env) {
+export async function handlePortalLogout(request, env, session) {
+  if (!validateCsrf(request, await readForm(request), session)) return new Response("Invalid form token", { status: 403 });
   await destroyClientSession(request, env);
   return redirect("/portal", { "set-cookie": clearClientCookie(request) });
 }
 
 async function portalData(env, clientId) {
   const batch = await env.DB.batch([
-    env.DB.prepare(`SELECT * FROM projects WHERE client_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`).bind(clientId),
+    env.DB.prepare(`SELECT * FROM projects WHERE client_id = ? AND status = 'active' ORDER BY created_at DESC, id DESC LIMIT 1`).bind(clientId),
     env.DB.prepare(`SELECT * FROM updates WHERE client_id = ? AND client_visible = 1 ORDER BY created_at DESC LIMIT 12`).bind(clientId),
     env.DB.prepare(`SELECT * FROM requests WHERE client_id = ? ORDER BY created_at DESC LIMIT 12`).bind(clientId),
     env.DB.prepare(`SELECT * FROM agreements WHERE client_id = ? AND status = 'active' ORDER BY created_at DESC`).bind(clientId)
@@ -100,7 +100,7 @@ export async function portalHome(env, session, url) {
 }
 
 export async function handlePortalRequest(request, env, session) {
-  const form = await request.formData();
+  const form = await readForm(request);
   if (!validateCsrf(request, form, session)) return new Response("Invalid form token", { status: 403 });
   const type = String(form.get("type") || "other");
   const urgency = String(form.get("urgency") || "normal");

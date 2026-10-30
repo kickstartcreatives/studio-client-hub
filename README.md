@@ -1,5 +1,8 @@
 # Studio Client Hub
 
+[![CI](https://github.com/kickstartcreatives/studio-client-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/kickstartcreatives/studio-client-hub/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3f6b5b.svg)](LICENSE)
+
 A calm, self-hosted client CRM and portal for independent web designers. It gives the
 studio an admin dashboard and Client 360, while each client gets a private project page
 for progress, updates, agreements, and requests.
@@ -7,6 +10,20 @@ for progress, updates, agreements, and requests.
 The starter is intentionally standalone: one Cloudflare Worker and one D1 database. It
 does not depend on a separate proposal app, website monitor, project tracker, or private
 font license.
+
+Use **[this template](https://github.com/new?template_name=studio-client-hub&template_owner=kickstartcreatives)**
+to make your own copy, or clone the repository to try it locally. Local evaluation needs
+no Cloudflare account or email service. Hosting it for clients requires your own Cloudflare
+and Resend setup.
+
+![Studio dashboard with fictional demo data](docs/images/admin-dashboard.png)
+
+<details>
+<summary>See the client portal</summary>
+
+![Client portal with fictional demo data](docs/images/client-portal.png)
+
+</details>
 
 ## What is included
 
@@ -32,17 +49,24 @@ There is no framework, build-time CSS system, or client-side JavaScript dependen
 
 ## Quick start
 
-You need Node.js 20 or newer.
+Use Node.js 24 LTS (recommended) or 22, plus npm. The minimum supported version is
+Node.js 22, matching [Wrangler's requirements](https://developers.cloudflare.com/workers/wrangler/install-and-update/).
+If you use nvm, run `nvm use` in this directory.
 
 ```bash
-npm install
-cp .dev.vars.example .dev.vars
+git clone https://github.com/kickstartcreatives/studio-client-hub.git
+cd studio-client-hub
+npm ci
+npm run setup
 npm run db:migrate:local
 npm run db:seed:local
 npm run dev
 ```
 
-Open `http://localhost:8787/admin/login` and use the `ADMIN_PASSWORD` from `.dev.vars`.
+Open `http://localhost:8787/admin/login` and use the generated `ADMIN_PASSWORD` from
+`.dev.vars`. The setup command creates unique local credentials and preserves any existing
+file. Do not copy `.dev.vars.example` unchanged; its placeholders intentionally fail the
+configuration check. Your local database and credentials are ignored by Git.
 
 To preview the client experience, open `http://localhost:8787/portal`, enter
 `maya@example.com`, and use the local preview link shown on the page. Preview links are
@@ -109,14 +133,34 @@ Sunrise Wellness demo record.
 ## Quality checks
 
 ```bash
-npm test
-npm audit
+npm run check
 ```
 
 The integration suite boots the actual Worker runtime and D1, then tests admin auth,
 single-use magic links, tenant isolation, CSRF protection, output escaping, CRUD flows,
 request submission, and the design token. GitHub Actions runs the same checks on every
-push and pull request.
+push and pull request, plus a weekly check. CI covers Node.js 22 and 24 and never deploys.
+
+## Contributing and maintenance
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the code map and contribution workflow.
+[Report a bug](https://github.com/kickstartcreatives/studio-client-hub/issues/new?template=bug_report.yml)
+with reproduction steps and fictional data. Security problems go through the
+[private reporting process](SECURITY.md#reporting-a-vulnerability).
+
+Dependabot proposes weekly dependency and GitHub Actions updates. Review and test changes
+before updating a deployed fork. This is a self-hosted starter, with no hosted service or
+promised support response time.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `Setup incomplete` | Run `npm run setup` if `.dev.vars` is missing. Otherwise replace placeholders and check secret lengths; signing secrets must differ. |
+| `no such table` | Run `npm run db:migrate:local`. Remote deployments need the separate `--remote` migration step. |
+| No demo client | Run `npm run db:seed:local`; the seed can be run again without duplicating its records. |
+| No local sign-in link | Use `localhost` or `127.0.0.1`, check `DEV_SHOW_MAGIC_LINKS=1`, and use `maya@example.com`. Repeated attempts pause links for 15 minutes. |
+| No deployed email | Check the Resend key, verified `EMAIL_FROM` domain and provider delivery logs. The sign-in response intentionally does not reveal whether an address is registered. |
 
 ## Intentional scope
 
@@ -130,4 +174,7 @@ for security guidance.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. You can use, adapt and redistribute the code, including commercially, while keeping
+the license and copyright notice. See [LICENSE](LICENSE). Third-party dependencies retain
+their own licenses. `private: true` in `package.json` only prevents accidental npm publishing;
+it does not make this GitHub repository private.

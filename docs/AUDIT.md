@@ -1,78 +1,66 @@
-# Publication audit
+# Public-template review
 
-Audit date: 2026-08-13
+Review date: October 29, 2026. This is a record of the checks performed, not a guarantee
+that the software has no defects.
 
-## Decision
+## Scope
 
-The production Hub and client portal were not copied into this repository. They are
-valuable production systems, but they are not safe or practical public-template code in
-their current form.
+Studio Client Hub remains a public MIT-licensed template. It is a standalone Worker and
+D1 app with fictional sample data, not an export of a private production CRM. The original
+standalone snapshot was published on August 13, 2026.
 
-Instead, this repository reimplements the reusable experience as a standalone app.
+## Fixes in this review
 
-## Findings in the production code
+- Replaced the broken copy-the-example setup path with generated, unique local credentials.
+  Setup preserves an existing `.dev.vars`; configuration rejects published placeholders
+  and reused signing secrets.
+- Updated Wrangler and its matching Miniflare runtime. The previous lockfile had four
+  high-severity audit findings; the updated lockfile has zero reported vulnerabilities.
+- Made login throttles atomic and added separate portal email and IP limits. Tests cover
+  concurrent guesses, changed IPs and window expiry.
+- Converted sign-out and admin client previews to POST with CSRF validation.
+- Added bounded form parsing, controlled malformed-token handling and safe error responses.
+- Prevented caching of dynamic responses and stripped URL paths from referrers. Chrome
+  form testing caught an initial `no-referrer` regression; the verified policy is
+  `strict-origin`, which preserves same-origin form validation.
+- Fixed duplicate client cards when a client has multiple active projects.
+- Connected editor labels to their inputs, named icon-only links and restored admin
+  sign-out on small screens. Focus outlines now use a solid color.
+- Added contributor instructions, issue/PR templates, Dependabot updates, pinned Actions,
+  a weekly dependency check, troubleshooting and fictional-data README screenshots.
 
-The audit found five categories that had to be removed or redesigned:
+## Verification
 
-1. **Deployment-specific configuration.** The production projects contain real domains,
-   database bindings, account-level access settings, storage configuration, and operator
-   contact values.
-2. **Cross-application coupling.** Client 360 and the portal read across several sibling
-   applications and databases. A fresh clone would render incomplete pages or fail until
-   every related service was recreated.
-3. **Private design assets.** The original interface uses font files and brand details
-   that are not appropriate to redistribute in a generic public repository.
-4. **Business-specific rules and copy.** Service tiers, status vocabulary, prices,
-   proposal flows, care plans, and operational language are tailored to one studio.
-5. **Setup documentation drift.** Some production repository documentation describes an
-   earlier skeleton rather than the current connected system.
+- Fresh source export: `npm ci`, local setup, D1 migration and fictional seed succeeded.
+- `npm run check`: 32 tests pass; Worker bundle dry-run succeeds; npm audit reports zero
+  known vulnerabilities at review time.
+- Integration tests use the actual Worker runtime and D1. Coverage includes admin CRUD,
+  transactional duplicate-email rejection, client scoping, private updates, forged client
+  IDs, CSRF/origin rejection, escaped output, session expiry, secure cookies, throttling,
+  and single-use magic links under concurrent redemption.
+- Setup tests check unique secrets, file permissions and preservation of an existing file.
+- Email transport tests simulate provider success, errors and timeout. No real email is sent.
+- Chrome checks on a clean local database: admin login, client preview, magic-link login,
+  request submission, profile editing and sign-out. Admin and portal checked at 390 px,
+  with a 768 px admin check and 1440 px desktop captures. No horizontal overflow on checked
+  screens; editor controls have accessible labels.
+- Gitleaks 8.30.1: repository history and proposed patch scanned with redacted output.
+  No detected secrets. Manual review found example contacts/domains, generic CSS and no
+  private font files, real deployment IDs or local filesystem paths in published source.
+- Private vulnerability reporting and Dependabot security updates are enabled. GitHub
+  secret scanning and push protection remain enabled.
 
-Publishing those repositories directly would create a brittle starter and increase the
-risk of exposing configuration or redistributing assets without the right license.
+CI checks Node.js 22 and 24 on pushes and pull requests. The
+[workflow history](https://github.com/kickstartcreatives/studio-client-hub/actions/workflows/ci.yml)
+records results for each commit.
 
-## Changes made for the public starter
+## Limits of this verification
 
-- Reduced the architecture to one Worker and one D1 database
-- Replaced cross-database joins with local, explicit tables
-- Removed real domains, IDs, names, paths, pricing rules, and account settings
-- Removed private font files and used Inter/system fonts
-- Replaced the bright indigo accent with muted evergreen (`#3f6b5b`)
-- Rewrote the product copy in neutral studio language
-- Added fictional seed data only
-- Added fail-closed configuration checks
-- Added signed admin sessions and HMAC-hashed client sessions/tokens
-- Added single-use, 20-minute magic links
-- Added SameSite/HttpOnly cookies, origin checks, and CSRF tokens
-- Added login throttling and tenant-scoped portal queries
-- Added a Content Security Policy and standard browser security headers
-- Added automated runtime, D1, security, and tenant-isolation tests
-- Pinned and audited development dependencies
+No production Worker, remote D1 database or real Resend sender was provisioned during this
+review. A maintainer still needs to verify their own deployed domain, sender and backups
+before inviting real clients. Browser checks used Chrome; other browser engines were not
+exercised. This review is not an independent penetration test or a full accessibility audit.
 
-## Verification completed
-
-- Worker bundle dry-run: passed
-- D1 migration and fictional seed: passed
-- Automated integration/security tests: passed
-- Admin dashboard desktop browser review: passed
-- Client 360 desktop browser review: passed
-- Client portal desktop browser review: passed
-- Admin and portal mobile review at 390 px: passed with no horizontal overflow
-- Browser console error check: clean
-- Static asset delivery check: passed
-- npm vulnerability audit: zero known vulnerabilities
-- Bright-indigo token scan: clean
-
-## Remaining publication checks
-
-Before making a GitHub repository public, the maintainer should still:
-
-- Review the fictional wording and sample data
-- Replace the placeholder repository URLs once the repository exists
-- Decide whether to include screenshots in the README
-- Enable branch protection and secret scanning in GitHub
-- Confirm the target Cloudflare and Resend setup with a clean external account
-
-No test suite can guarantee that software will never have a future defect. This audit is
-evidence that the documented clean-install path and core workflows work in the tested
-environment; it is not a promise that every future platform or dependency change will be
-bug-free.
+The app deliberately uses one shared studio administrator and one client per portal
+contact. It does not implement staff roles, billing, attachments or automatic imports.
+Session revocation and database-housekeeping procedures are in [SECURITY.md](../SECURITY.md).

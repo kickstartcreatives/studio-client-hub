@@ -215,3 +215,207 @@ test("the design uses muted evergreen and contains no bright indigo token", asyn
   assert.match(markup, /--accent: #3f6b5b/);
   assert.doesNotMatch(markup, /#4f46e5|79,\s*70,\s*229/i);
 });
+
+test("private pages, redirects and errors prevent caching and referrer disclosure", async () => {
+  for (const path of ["/", "/admin", "/portal", "/missing", "/portal/auth/%E0%A4%A"]) {
+    const response = await mf.dispatchFetch(`${origin}${path}`, { redirect: "manual" });
+    assert.notEqual(response.status, 500);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("referrer-policy"), "strict-origin");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  }
+});
+
+test("malformed and oversized forms are rejected without a server error", async () => {
+  for (const path of ["/admin/login", "/portal/login", "/admin/clients", "/portal/requests"]) {
+    const cookie = `${adminCookie}; ${clientCookie}`;
+    for (const [type, body, status] of [
+      ["application/json", "{}", 415],
+      ["multipart/form-data", "broken", 400],
+      ["application/x-www-form-urlencoded", `details=${"a".repeat(40000)}`, 413]
+    ]) {
+      const response = await mf.dispatchFetch(`${origin}${path}`, { method: "POST", headers: { "content-type": type, origin, cookie }, body });
+      assert.equal(response.status, status, `${path}: ${type}`);
+    }
+  }
+});
+
+test("multiple active projects produce one client card and a consistent current project", async () => {
+  await db.prepare(`INSERT INTO projects (id, client_id, name, stage, current_focus, created_at) VALUES ('newer-project', 'client-sunrise', 'Second project', 'New stage', 'New focus', datetime('now', '+1 minute'))`).run();
+  for (const path of ["/admin", "/admin/clients"]) {
+    const response = await mf.dispatchFetch(`${origin}${path}`, { headers: { cookie: adminCookie } });
+    const markup = await response.text();
+    assert.equal((markup.match(/href="\/admin\/clients\/client-sunrise"/g) || []).length, 1);
+    assert.match(markup, /New stage/);
+  }
+  const response = await mf.dispatchFetch(`${origin}/portal`, { headers: { cookie: clientCookie } });
+  assert.match(await response.text(), /New focus/);
+});
+
+test("duplicate portal emails roll back client creation", async () => {
+  const response = await mf.dispatchFetch(...formRequest("/admin/clients", { csrf: adminCsrf, name: "Duplicate", business: "Should not exist", email: "MAYA@EXAMPLE.COM" }, adminCookie));
+  assert.equal(response.status, 400);
+  const row = await db.prepare("SELECT COUNT(*) AS count FROM clients WHERE business = 'Should not exist'").first();
+  assert.equal(row.count, 0);
+});
+
+test("private updates and other tenants' projects, requests and agreements stay hidden", async () => {
+  const other = await db.prepare("SELECT client_id FROM users WHERE email = 'jordan@example.com'").first();
+  await db.batch([
+    db.prepare("INSERT INTO updates (id, client_id, body, client_visible) VALUES ('staff-only', 'client-sunrise', 'STAFF_ONLY_CONTENT', 0)"),
+    db.prepare("INSERT INTO projects (id, client_id, name) VALUES ('other-project', ?, 'OTHER_PROJECT_SECRET')").bind(other.client_id),
+    db.prepare("INSERT INTO agreements (id, client_id, label) VALUES ('other-agreement', ?, 'OTHER_AGREEMENT_SECRET')").bind(other.client_id),
+    db.prepare("INSERT INTO requests (id, client_id, user_id, type, details) SELECT 'other-request', client_id, id, 'support', 'OTHER_REQUEST_SECRET' FROM users WHERE email = 'jordan@example.com'")
+  ]);
+  const response = await mf.dispatchFetch(`${origin}/portal?client_id=${other.client_id}`, { headers: { cookie: clientCookie } });
+  const markup = await response.text();
+  assert.doesNotMatch(markup, /STAFF_ONLY_CONTENT|OTHER_PROJECT_SECRET|OTHER_AGREEMENT_SECRET|OTHER_REQUEST_SECRET/);
+  const sent = await mf.dispatchFetch(...formRequest("/portal/requests", { csrf: clientCsrf, client_id: other.client_id, user_id: "forged", type: "support", details: "Tenant injection attempt" }, clientCookie));
+  assert.equal(sent.status, 303);
+  const row = await db.prepare("SELECT client_id, user_id FROM requests WHERE details = 'Tenant injection attempt'").first();
+  assert.equal(row.client_id, "client-sunrise");
+  assert.equal(row.user_id, "user-maya");
+  const forbidden = await mf.dispatchFetch(`${origin}/admin/clients/${other.client_id}`, { headers: { cookie: clientCookie }, redirect: "manual" });
+  assert.equal(forbidden.headers.get("location"), "/admin/login");
+});
+
+test("portal and admin mutations reject a foreign origin even with the correct CSRF token", async () => {
+  for (const [path, values, cookie] of [
+    ["/portal/requests", { csrf: clientCsrf, type: "support", details: "Foreign origin" }, clientCookie],
+    ["/admin/clients", { csrf: adminCsrf, name: "Foreign origin", email: "foreign@example.com" }, adminCookie],
+    ["/admin/view-as/client-sunrise", { csrf: adminCsrf }, adminCookie],
+    ["/portal/logout", { csrf: clientCsrf }, clientCookie],
+    ["/admin/logout", { csrf: adminCsrf }, adminCookie]
+  ]) {
+    const [url, init] = formRequest(path, values, cookie);
+    init.headers.origin = "https://foreign.example";
+    assert.equal((await mf.dispatchFetch(url, init)).status, 403, path);
+  }
+  const missingCsrf = await mf.dispatchFetch(...formRequest("/portal/requests", { type: "support", details: "No token" }, clientCookie));
+  assert.equal(missingCsrf.status, 403);
+});
+
+test("client preview and logout require POST and a valid form token", async () => {
+  for (const path of ["/admin/view-as/client-sunrise", "/admin/logout", "/portal/logout"]) {
+    const response = await mf.dispatchFetch(`${origin}${path}`, { headers: { cookie: `${adminCookie}; ${clientCookie}` }, redirect: "manual" });
+    assert.equal(response.status, 405);
+    assert.equal(response.headers.get("allow"), "POST");
+    const denied = await mf.dispatchFetch(...formRequest(path, { csrf: "bad" }, `${adminCookie}; ${clientCookie}`));
+    assert.equal(denied.status, 403);
+  }
+  const preview = await mf.dispatchFetch(...formRequest("/admin/view-as/client-sunrise", { csrf: adminCsrf }, adminCookie));
+  assert.equal(preview.status, 303);
+  const previewCookie = cookieFrom(preview);
+  const page = await mf.dispatchFetch(`${origin}/portal`, { headers: { cookie: previewCookie } });
+  const csrf = hidden(await page.text(), "csrf");
+  const logout = await mf.dispatchFetch(...formRequest("/portal/logout", { csrf }, previewCookie));
+  assert.equal(logout.status, 303);
+  assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
+  const revoked = await mf.dispatchFetch(`${origin}/portal`, { headers: { cookie: previewCookie } });
+  assert.match(await revoked.text(), /Open your client portal/);
+  const adminLogout = await mf.dispatchFetch(...formRequest("/admin/logout", { csrf: adminCsrf }, adminCookie));
+  assert.equal(adminLogout.status, 303);
+  assert.match(adminLogout.headers.get("set-cookie"), /Max-Age=0/);
+});
+
+test("concurrent admin guesses are limited and the window resets", async () => {
+  await db.prepare("DELETE FROM login_attempts").run();
+  const responses = await Promise.all(Array.from({ length: 12 }, () => mf.dispatchFetch(...formRequest("/admin/login", { password: "wrong" }))));
+  const bodies = await Promise.all(responses.map((response) => response.text()));
+  assert.equal(bodies.filter((body) => body.includes("did not match")).length, 5);
+  assert.equal(bodies.filter((body) => body.includes("Too many attempts")).length, 7);
+  const blocked = await mf.dispatchFetch(...formRequest("/admin/login", { password: "correct horse battery staple" }));
+  assert.equal(blocked.status, 200);
+  await db.prepare("UPDATE login_attempts SET updated_at = datetime('now', '-16 minutes')").run();
+  const allowed = await mf.dispatchFetch(...formRequest("/admin/login", { password: "correct horse battery staple" }));
+  assert.equal(allowed.status, 303);
+});
+
+test("portal throttling cannot be bypassed by parallel requests or rotating IPs", async () => {
+  await db.prepare("DELETE FROM login_attempts").run();
+  const responses = await Promise.all(Array.from({ length: 12 }, (_, i) => {
+    const [url, init] = formRequest("/portal/login", { email: "maya@example.com" });
+    init.headers["CF-Connecting-IP"] = `192.0.2.${i + 1}`;
+    return mf.dispatchFetch(url, init);
+  }));
+  const bodies = await Promise.all(responses.map((response) => response.text()));
+  assert.equal(bodies.filter((body) => body.includes("Local preview link")).length, 5);
+});
+
+test("portal IP throttling also limits requests across different addresses", async () => {
+  await db.prepare("DELETE FROM login_attempts").run();
+  for (let i = 0; i < 20; i++) await mf.dispatchFetch(...formRequest("/portal/login", { email: `unknown-${i}@example.com` }));
+  const blocked = await mf.dispatchFetch(...formRequest("/portal/login", { email: "maya@example.com" }));
+  assert.doesNotMatch(await blocked.text(), /Local preview link/);
+  await db.prepare("UPDATE login_attempts SET updated_at = datetime('now', '-16 minutes')").run();
+  const allowed = await mf.dispatchFetch(...formRequest("/portal/login", { email: "maya@example.com" }));
+  assert.match(await allowed.text(), /Local preview link/);
+});
+
+test("magic links expire and concurrent redemption creates only one session", async () => {
+  await db.prepare("DELETE FROM login_attempts").run();
+  async function newLink() {
+    const response = await mf.dispatchFetch(...formRequest("/portal/login", { email: "maya@example.com" }));
+    return (await response.text()).match(/href="(http:\/\/localhost\/portal\/auth\/[^"]+)"/)[1];
+  }
+  const expired = await newLink();
+  await db.prepare("UPDATE magic_tokens SET expires_at = datetime('now', '-1 minute') WHERE used_at IS NULL").run();
+  const expiredResponse = await mf.dispatchFetch(expired, { redirect: "manual" });
+  assert.equal(expiredResponse.headers.get("set-cookie"), null);
+  assert.match(await expiredResponse.text(), /expired or has already been used/);
+  const link = await newLink();
+  const attempts = await Promise.all(Array.from({ length: 8 }, () => mf.dispatchFetch(link, { redirect: "manual" })));
+  assert.equal(attempts.filter((response) => response.status === 303).length, 1);
+});
+
+test("local preview links never appear on a deployed hostname", async () => {
+  await db.prepare("DELETE FROM login_attempts").run();
+  const response = await mf.dispatchFetch("https://studio.example/portal/login", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://studio.example" }, body: "email=maya%40example.com" });
+  const markup = await response.text();
+  assert.doesNotMatch(markup, /Local preview link|\/portal\/auth\//);
+  assert.match(markup, /Email delivery is not configured/);
+});
+
+test("HTTPS cookies are secure and tampered or expired sessions do not authenticate", async () => {
+  await db.prepare("DELETE FROM login_attempts").run();
+  const login = await mf.dispatchFetch("https://studio.example/admin/login", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://studio.example" }, body: "password=correct+horse+battery+staple", redirect: "manual" });
+  assert.match(login.headers.get("set-cookie"), /HttpOnly; SameSite=Strict; Max-Age=43200; Secure/);
+  const { createSignedPayload } = await import("../src/security.js");
+  const expired = await createSignedPayload("test-session-secret-with-at-least-thirty-two-characters", { exp: 1, csrf: "x", nonce: "y" });
+  for (const cookie of [`${adminCookie}tampered`, `studio_admin=${expired}`, "studio_admin=invalid"]) {
+    const response = await mf.dispatchFetch(`${origin}/admin`, { headers: { cookie }, redirect: "manual" });
+    assert.equal(response.headers.get("location"), "/admin/login");
+  }
+  await db.prepare("UPDATE sessions SET expires_at = datetime('now', '-1 minute')").run();
+  const response = await mf.dispatchFetch(`${origin}/portal`, { headers: { cookie: clientCookie } });
+  assert.match(await response.text(), /Open your client portal/);
+});
+
+test("remaining admin write flows persist projects, agreements and request status", async () => {
+  const project = await mf.dispatchFetch(...formRequest("/admin/clients/client-sunrise/projects", { csrf: adminCsrf, name: "Added project", stage: "Planning", progress: "10" }, adminCookie));
+  assert.equal(project.status, 303);
+  assert.ok(await db.prepare("SELECT id FROM projects WHERE name = 'Added project'").first());
+  const agreement = await mf.dispatchFetch(...formRequest("/admin/clients/client-sunrise/agreements", { csrf: adminCsrf, label: "Site care", amount: "$100", cadence: "Monthly" }, adminCookie));
+  assert.equal(agreement.status, 303);
+  assert.ok(await db.prepare("SELECT id FROM agreements WHERE amount = '$100'").first());
+  const update = await mf.dispatchFetch(...formRequest("/admin/requests/request-sunrise-1/status", { csrf: adminCsrf, status: "done" }, adminCookie));
+  assert.equal(update.status, 303);
+  assert.equal((await db.prepare("SELECT status FROM requests WHERE id = 'request-sunrise-1'").first()).status, "done");
+  const invalid = await mf.dispatchFetch(...formRequest("/admin/requests/request-sunrise-1/status", { csrf: adminCsrf, status: "invented" }, adminCookie));
+  assert.equal(invalid.status, 400);
+});
+
+test("client editor controls have unique IDs and associated visible labels", async () => {
+  const response = await mf.dispatchFetch(`${origin}/admin/clients/client-sunrise`, { headers: { cookie: adminCookie } });
+  const markup = await response.text();
+  const ids = [...markup.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(new Set(ids).size, ids.length, "multiple projects must not duplicate field IDs");
+  for (const match of markup.matchAll(/<(?:input|textarea|select)\b[^>]*>/g)) {
+    const [tag] = match;
+    const preceding = markup.slice(0, match.index);
+    if (preceding.lastIndexOf("<label") > preceding.lastIndexOf("</label>")) continue;
+    if (tag.includes('type="hidden"') || tag.includes('aria-label="')) continue;
+    const id = tag.match(/\bid="([^"]+)"/)?.[1];
+    assert.ok(id && markup.includes(`<label for="${id}">`), `unlabelled control: ${tag}`);
+  }
+});
