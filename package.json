@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "miniflare": "5.20261023.3-beta",
-    "wrangler": "4.156.2"
+    "wrangler": "4.163.0"
   },
   "description": "Self-hosted client CRM and portal for independent web designers.",
   "license": "MIT",
